@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
- 
+
 #------------------- MODULES -------------------
 use Getopt::Long;
 use JSON::XS;
@@ -60,7 +60,7 @@ parse_ops(@ARGV);
     {$writer->xmlDecl("UTF-8")}
   
   if($r) # ROOT TAG START
-    {$writer->startTag($r)}
+    {$writer->startTag($r);}
   
   #recursive implementation.
   if (ref $json eq 'ARRAY') 
@@ -144,11 +144,30 @@ sub subdata
   }
 }
 #------------------- SUBDATA -------------------
+
+#---------------- ISVALIDELEMENT -----------------
+sub isvalidelement
+{
+  my ($pom) = @_;
+  if($pom =~ /^[_:A-Za-z\ě\š\č\ř\ž\ý\á\í\é\ú\ů\ť\ň\ď\Ě\Š\Č\Ř\Ž\Ý\Á\Í\É\Ú\Ů\Ď\Ť\Ň\ó\Ó][-._:A-Za-z0-9\ě\š\č\ř\ž\ý\á\í\é\ú\ů\ť\ň\ď\Ě\Š\Č\Ř\Ž\Ý\Á\Í\É\Ú\Ů\Ď\Ť\Ň\ó\Ó]*$/)
+    {return 1;}
+  else
+    {return 0;}
+}
+#---------------- ISVALIDELEMENT -----------------
+
 #----------------- WRITE_VALUE ------------------
 sub write_value
 {
   my ($first, $second) = @_;
-  
+   
+  # is $first valid element? Also replace those characters!
+  $first =~ s/[^-._:A-Za-z0-9\ě\š\č\ř\ž\ý\á\í\é\ú\ů\ť\ň\ď\Ě\Š\Č\Ř\Ž\Ý\Á\Í\É\Ú\Ů\Ď\Ť\Ň\ó\Ó]/$h/g;
+  # Ain't Nobody Got Time for That!
+  if(!isvalidelement($first))
+  {
+    my_die(51,"invalid element name: ".$first."\n");
+  }
   # first at all, we check if $second is defined.
   if($second eq undef )
   {  # ----- NULL -----
@@ -215,13 +234,31 @@ sub write_value
     else # ----- STRING -----
     {
       # there is no other options. We write string depending on $s
-      if($s)
-	{$writer->emptyTag($first, 'value' => $second);}
+      if($c)
+      {
+	if($s)
+	  {
+	    $writer->raw("<".$first." value=\"");
+	    $writer->characters($second);
+	    $writer->raw("\" />");
+	  }
+	else
+	{
+	  $writer->startTag($first);
+	  $writer->characters($second);
+	  $writer->endTag($first);
+	}
+      }
       else
       {
-	$writer->startTag($first);
-	$writer->characters($second);
-	$writer->endTag($first);
+	if($s)
+	  {$writer->emptyTag($first, 'value' => $second);}
+	else
+	{
+	  $writer->startTag($first);
+	  $writer->raw($second);
+	  $writer->endTag($first);
+	}
       }
     }
   }
@@ -232,7 +269,7 @@ sub write_value
 sub parse_ops 
 {
   my $pom = join(' ',@_);
-  if ($pom eq "" || $pom =~ s/--help//)
+  if ($pom =~ s/--help//)
   {
     help();
     exit 1;
@@ -254,10 +291,10 @@ sub parse_ops
     'r:s'		=> sub { if( defined $r) {
 		my_die(1, "Error: -r can be specified only once\n");
 		} else {$r = $_[1];}},
-    'array_name:s'	=> sub { if( defined $array_name) {
+    'array-name:s'	=> sub { if( defined $array_name) {
 		my_die(1, "Error: --array_name can be specified only once\n");
 		} else {$array_name = $_[1];}},
-    'item_name:s'	=> sub { if( defined $item_name) {
+    'item-name:s'	=> sub { if( defined $item_name) {
 		my_die(1, "Error: --item_name can be specified only once\n");
 		} else {$item_name = $_[1];}},
     's'		=> sub { if( defined $s) {
@@ -266,6 +303,9 @@ sub parse_ops
     'i'		=> sub { if( defined $i) {
 		my_die(1, "Error: -i can be specified only once\n");
 		} else {$i = $_[1];}},
+    'l'		=> sub { if( defined $l) {
+		my_die(1, "Error: -l can be specified only once\n");
+		} else {$l = $_[1];}},
     'c'		=> sub { if( defined $c) {
 		my_die(1, "Error: -c can be specified only once\n");
 		} else {$c = $_[1];}},
@@ -299,6 +339,24 @@ sub parse_ops
   {
     my_die(1,"-t must be set if start is in use!\n");
   }
+  
+  if($r ne "")
+  {
+    if(!isvalidelement($r))
+    {
+      my_die(50,"root element is not valid XML element name!\n");
+    }
+  }
+  if(!isvalidelement($array_name))
+  {
+    my_die(50,"array name is not valid!\n");
+  }
+  if(!isvalidelement($item_name))
+  {
+    my_die(50,"array name is not valid!\n");
+  }
+  
+  
 }
 #------------------ ARGUMENTS ------------------
 
