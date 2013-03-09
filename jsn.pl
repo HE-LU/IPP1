@@ -10,20 +10,20 @@ use IO::File;
 #------------------- MODULES -------------------
 
 #------------------- GLOBALS -------------------
-my $input="";		# input file
-my $output="";		# output file
-my $h="-";		# substr
-my $n=0;			# xmlheader
-my $r='';		# wrap result in
-my $array_name="array";	# array name
-my $item_name="item";	# item name
-my $s=0;			# string transform
-my $i=0;			# integer transform
-my $l=0;			# literals transform
-my $c=0;			# root array recovery
-my $a=0;			# size
-my $t=0;			# index
-my $start=0;		# index from 
+my $input;		# input file
+my $output;		# output file
+my $h;			# substr
+my $n;			# xmlheader
+my $r;			# wrap result in
+my $array_name;		# array name
+my $item_name;		# item name
+my $s;			# string transform
+my $i;			# integer transform
+my $l;			# literals transform
+my $c;			# root array recovery
+my $a;			# size
+my $t;			# index
+my $start;		# index from 
 #------------------- GLOBALS -------------------
 
 #-------------------- MAIN --------------------
@@ -34,11 +34,23 @@ parse_ops(@ARGV);
   # we load json file into $json.   
   local $/=undef; 
   
-  open FILE, "<", $input or my_die(50,"Cannot open file: ".$input);
-  $json = JSON::XS->new->utf8(0)->decode(<FILE>);
-  close FILE;
-   
+  if($input eq "")
+  {
+    $json = JSON::XS->new->utf8(0)->decode(<STDIN>);
+  }
+  else
+  {
+    open FILE, "<", $input or my_die(50,"Cannot open file: ".$input);
+    $json = JSON::XS->new->utf8(0)->decode(<FILE>);
+    close FILE;
+  }
+  
   # open output file and make XML writer.
+  if($output eq "")
+    {my $out = <STDOUT>;}
+  else
+    {my $out = new IO::File(">$output");}
+    
   my $out = new IO::File(">$output");
   my $writer = new XML::Writer(OUTPUT => $out, UNSAFE => 1);
   
@@ -61,15 +73,16 @@ parse_ops(@ARGV);
     {$writer->endTag($r)}
 
   $writer->end();
-  $out->close();
+  if($output ne "")
+    {$out->close();}
 #-------------------- MAIN --------------------
 
 #------------------- MY_DIE --------------------
 sub my_die
 {
   my ($err, $msg) = @_;
-  $! = $err;
-  die $msg;
+  print STDERR $msg;
+  exit $err;
 }
 #------------------- MY_DIE --------------------
 
@@ -224,29 +237,63 @@ sub parse_ops
     help();
     exit 1;
   }
-  
+
   GetOptions(
-    'input:s'		=> \$input,
-    'output:s'		=> \$output,
-    'h:s'			=> \$h,
-    'n'			=> \$n,
-    'r:s'			=> \$r,
-    'array_name:s'		=> \$array_name,
-    'item_name:s'		=> \$item_name,
-    's'			=> \$s,
-    'i'			=> \$i,
-    'c'			=> \$c,
-    'a'			=> \$a,
-    'array-size'		=> \$a,
-    't'			=> \$t,
-    'index-items'		=> \$t,
-    'start:i'		=> \$start,
+    'input:s'	=> sub { if( defined $input) {
+		my_die(1, "Error: --input can be specified only once\n");
+		} else {$input = $_[1];}},
+    'output:s'	=> sub { if( defined $output) {
+		my_die(1, "Error: --output can be specified only once\n");
+		} else {$output = $_[1];}},
+    'h:s'		=> sub { if( defined $h) {
+		my_die(1, "Error: -h can be specified only once\n");
+		} else {$h = $_[1];}},
+    'n'		=> sub { if( defined $n) {
+		my_die(1, "Error: -n can be specified only once\n");
+		} else {$n = $_[1];}},
+    'r:s'		=> sub { if( defined $r) {
+		my_die(1, "Error: -r can be specified only once\n");
+		} else {$r = $_[1];}},
+    'array_name:s'	=> sub { if( defined $array_name) {
+		my_die(1, "Error: --array_name can be specified only once\n");
+		} else {$array_name = $_[1];}},
+    'item_name:s'	=> sub { if( defined $item_name) {
+		my_die(1, "Error: --item_name can be specified only once\n");
+		} else {$item_name = $_[1];}},
+    's'		=> sub { if( defined $s) {
+		my_die(1, "Error: -s can be specified only once\n");
+		} else {$s = $_[1];}},
+    'i'		=> sub { if( defined $i) {
+		my_die(1, "Error: -i can be specified only once\n");
+		} else {$i = $_[1];}},
+    'c'		=> sub { if( defined $c) {
+		my_die(1, "Error: -c can be specified only once\n");
+		} else {$c = $_[1];}},
+    'a'		=> sub { if( defined $a) {
+		my_die(1, "Error: -a can be specified only once\n");
+		} else {$a = $_[1];}},
+    'array-size'	=> sub { if( defined $a) {
+		my_die(1, "Error: -a can be specified only once\n");
+		} else {$a = $_[1];}},
+    't'		=> sub { if( defined $t) {
+		my_die(1, "Error: -t can be specified only once\n");
+		} else {$t = $_[1];}},
+    'index-items'	=> sub { if( defined $t) {
+		my_die(1, "Error: -t can be specified only once\n");
+		} else {$t = $_[1];}},
+    'start:i'	=> sub { if( defined $start) {
+		my_die(1, "Error: --start can be specified only once\n");
+		} else {$start = $_[1];}},
 );
   
-  if(!$input or !$output)
-  {
-    my_die(1,"input and output file must be specified!\n");
-  }
+  if($h eq "")
+    {$h = "-";}
+    
+  if($array_name eq "")
+    {$array_name = "array";}
+  
+  if($item_name eq "")
+    {$item_name = "item";}
   
   if(!$t and $start > 0)
   {
