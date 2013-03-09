@@ -68,7 +68,6 @@ parse_ops(@ARGV);
   else
     {subdata($json);}
   
-  
   if($r) # ROOT TAG END
     {$writer->endTag($r)}
 
@@ -237,11 +236,7 @@ sub write_value
       if($c)
       {
 	if($s)
-	  {
-	    $writer->raw("<".$first." value=\"");
-	    $writer->characters($second);
-	    $writer->raw("\" />");
-	  }
+	  {$writer->emptyTag($first, 'value' => $second);}
 	else
 	{
 	  $writer->startTag($first);
@@ -252,7 +247,11 @@ sub write_value
       else
       {
 	if($s)
-	  {$writer->emptyTag($first, 'value' => $second);}
+	  {
+	    $writer->raw("<".$first." value=\"");
+	    $writer->raw($second);
+	    $writer->raw("\" />");
+	  }
 	else
 	{
 	  $writer->startTag($first);
