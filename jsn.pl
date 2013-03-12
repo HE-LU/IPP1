@@ -1,9 +1,11 @@
 #!/usr/bin/perl
 
+#JSN:xherma25
+
 use strict;
 
 #------------------- MODULES -------------------
-use Getopt::Long;
+use Getopt::Long qw(:config pass_through);
 use JSON::XS;
 use XML::Writer;
 use IO::File;
@@ -24,6 +26,9 @@ my $c;			# root array recovery
 my $a;			# size
 my $t;			# index
 my $start;		# index from 
+
+my @Stack;
+my $StackCounter;
 #------------------- GLOBALS -------------------
 
 #-------------------- MAIN --------------------
@@ -40,7 +45,7 @@ parse_ops(@ARGV);
   }
   else
   {
-    open FILE, "<", $input or my_die(50,"Cannot open file: ".$input);
+    open FILE, "<", $input or my_die(2,"Cannot open file: ".$input."\n");
     $json = JSON::XS->new->utf8(0)->decode(<FILE>);
     close FILE;
   }
@@ -49,10 +54,10 @@ parse_ops(@ARGV);
   if($output eq "")
     {my $out = <STDOUT>;}
   else
-    {my $out = new IO::File(">$output");}
+    {my $out = new IO::File(">$output") or my_die(3,"Cannot open file: ".$output."\n");}
     
   my $out = new IO::File(">$output");
-  my $writer = new XML::Writer(OUTPUT => $out, UNSAFE => 1);
+  my $writer = new XML::Writer(OUTPUT => $out, UNSAFE => 1, UNSAFE => 1, DATA_MODE => 'true', DATA_INDENT => 2);
   
   
   #lets write header and root tag if set.
@@ -89,7 +94,15 @@ sub my_die
 sub subarray
 {
   my ($js) = @_;
-  $writer->startTag($array_name);
+  
+  if($a)
+    {$writer->startTag($array_name, "size" => scalar(@$js));}
+  else
+    {$writer->startTag($array_name);}
+    
+  push (@Stack, $StackCounter);
+  $StackCounter = $start;
+  
   # we found an array, so we need to analyze what is inside the array.
   foreach (@$js) 
   {
@@ -103,12 +116,19 @@ sub subarray
     {
       # if its an object or array, 
       # we place start and end tag, and we go deeper
-      $writer->startTag($item_name);
+      if($t)
+      {
+        $writer->startTag($item_name, 'index' => $StackCounter); ################
+        $StackCounter++;
+      }
+      else
+        {$writer->startTag($item_name);}
       subdata($row);
       $writer->endTag($item_name);  
     }
   }
   
+  $StackCounter = pop @Stack;
   $writer->endTag($array_name);   
 }
 #------------------ SUBARRAY -------------------
@@ -117,6 +137,10 @@ sub subarray
 sub subdata
 {
   my ($js) = @_;
+  
+  if (ref $js eq 'ARRAY') 
+    {subarray($js);
+    return;}
   
   # lets read $first and $second from associative array.
   # if its value is array, we call subarray.
@@ -173,16 +197,34 @@ sub write_value
     # if not, we write it depending on $l param.
     if($l)
     {
-      $writer->startTag($first);
+      if($t and $first eq $item_name)
+      {
+	$writer->startTag($first, 'index' => $StackCounter); ################
+	$StackCounter++;
+      }
+      else
+	{$writer->startTag($first);}
+	
       $writer->emptyTag('null');
       $writer->endTag($first);
     }
     else
     {
-      if($second)
-	{$writer->emptyTag($first, 'value' => $second);}
+      if($t and $first eq $item_name)
+      {
+	if($second)
+	  {$writer->emptyTag($first, 'value' => $second, 'index' => $StackCounter);$StackCounter++;} ###############
+	else
+	  {$writer->emptyTag($first, 'value' => 'null', 'index' => $StackCounter);$StackCounter++;} ###############
+      }
       else
-	{$writer->emptyTag($first, 'value' => 'null');}
+      {
+	if($second)
+	  {$writer->emptyTag($first, 'value' => $second);}
+	else
+	  {$writer->emptyTag($first, 'value' => 'null');}
+      }
+     
     }
   }
   # now we check if $second is a bool value.
@@ -191,7 +233,13 @@ sub write_value
     # if yes, we write it depending on $l param.
     if($l)
     {
-      $writer->startTag($first);
+      if($t and $first eq $item_name)
+      {
+	$writer->startTag($first, 'index' => $StackCounter); ################
+	$StackCounter++;
+      }
+      else
+	{$writer->startTag($first);}
       
       if($second)
 	{$writer->emptyTag('true');}
@@ -202,17 +250,28 @@ sub write_value
     }
     else
     {
-      if($second)
-	{$writer->emptyTag($first, 'value' => 'true');}
+      if($t and $first eq $item_name)
+      {
+	if($second)
+	  {$writer->emptyTag($first, 'value' => 'true', 'index' => $StackCounter);$StackCounter++;} ############
+	else
+	  {$writer->emptyTag($first, 'value' => 'false', 'index' => $StackCounter);$StackCounter++;} ############
+      }
       else
-	{$writer->emptyTag($first, 'value' => 'false');}
+      {
+	if($second)
+	  {$writer->emptyTag($first, 'value' => 'true');}
+	else
+	  {$writer->emptyTag($first, 'value' => 'false');}
+      }
     }
   }
   #else it must be number, or string.
   else
   {
     # so we check if it is a number.
-    if($second  =~ /^[+-]?\d+\.?\d*$/) # is a number?
+    #if($second  =~ /^[+-]?\d+\.?\d*$/) # is a number?
+    unless($second  ^ $second) # is a number?
     {  # ----- NUMBER -----
       # if the number is lesser then 0, we do this little magic.
       if($second < 0)
@@ -222,41 +281,72 @@ sub write_value
 
       # now we cant write the number, depending on $i
       if($i)
-	{$writer->emptyTag($first, 'value' => $num);}
-      else
       {
-	$writer->startTag($first);
+	if($t and $first eq $item_name)
+	{
+	  $writer->startTag($first, 'index' => $StackCounter); ##################
+	  $StackCounter++;
+	}
+	else
+	  {$writer->startTag($first);}
+	
 	$writer->characters($num);
 	$writer->endTag($first);
+      }
+      else
+      {
+	if($t and $first eq $item_name)
+	{
+	  $writer->emptyTag($first, 'value' => $num, 'index' => $StackCounter); ###################
+	  $StackCounter++;
+	}
+	else
+	  {$writer->emptyTag($first, 'value' => $num);}
       }
     }
     else # ----- STRING -----
     {
-      # there is no other options. We write string depending on $s
-      if($c)
+      # there is no other options. We write string depending on $s and $c
+      if($s)
       {
-	if($s)
-	  {$writer->emptyTag($first, 'value' => $second);}
-	else
+	if($t and $first eq $item_name)
 	{
-	  $writer->startTag($first);
-	  $writer->characters($second);
-	  $writer->endTag($first);
+	  $writer->startTag($first, 'index' => $StackCounter); ####################
+	  $StackCounter++;
 	}
+	else
+	  {$writer->startTag($first);}
+	  
+	if($c)
+	  {$writer->characters($second);}
+	else
+	  {$writer->raw($second);}
+	$writer->endTag($first);
       }
-      else
+      else	
       {
-	if($s)
+	if($c)
+	{
+	  if($t and $first eq $item_name)
 	  {
-	    $writer->raw("<".$first." value=\"");
-	    $writer->raw($second);
-	    $writer->raw("\" />");
+	    $writer->emptyTag($first, 'value' => $second); ################
+	    $StackCounter++;
 	  }
+	  else
+	    {$writer->emptyTag($first, 'value' => $second);}  
+	}
 	else
 	{
-	  $writer->startTag($first);
+	  if($t and $first eq $item_name)
+	  {
+	    $writer->raw("<".$first." index=\"".$StackCounter."\"value=\""); ################
+	    $StackCounter++;
+	  }
+	  else
+	    {$writer->raw("<".$first." value=\"");}
+	    
 	  $writer->raw($second);
-	  $writer->endTag($first);
+	  $writer->raw("\" />");
 	}
       }
     }
@@ -356,6 +446,17 @@ sub parse_ops
   }
   
   
+  if(@ARGV > 0)
+  {
+    my_die(1,"invalid arguments!\n");
+  }
+  
+  if($start eq "")
+  {
+    $start = 1;
+  }
+  
+  $StackCounter = $start;  
 }
 #------------------ ARGUMENTS ------------------
 
